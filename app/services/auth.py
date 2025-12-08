@@ -6,6 +6,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from app.services.student import StudentService
 from app.core.config import settings
+from app.core.security import SecurityValidator
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -81,6 +82,9 @@ class AuthService:
             Optional[Token]: Token object containing access token and type if successful,
                            None if authentication fails
         """
+        # Validar email
+        email = SecurityValidator.validate_email(email)
+        
         student = self.student_service.get_student_by_email(email)
         if not student:
             return None
@@ -106,6 +110,9 @@ class AuthService:
         Returns:
             str: The generated recovery code
         """
+        # Validar email
+        email = SecurityValidator.validate_email(email)
+        
         # Generate a 6-digit code
         code = ''.join(random.choices(string.digits, k=6))
         
@@ -135,6 +142,13 @@ class AuthService:
         Returns:
             bool: True if the code is valid and not expired, False otherwise
         """
+        # Validar email
+        email = SecurityValidator.validate_email(email)
+        
+        # Sanitizar código (solo permitir dígitos)
+        if not code.isdigit() or len(code) != 6:
+            return False
+        
         recovery_data = self.recovery_codes.find_one({
             "email": email,
             "code": code,
@@ -152,6 +166,13 @@ class AuthService:
             email: The student's email
             code: The recovery code to mark as used
         """
+        # Validar email
+        email = SecurityValidator.validate_email(email)
+        
+        # Sanitizar código
+        if not code.isdigit() or len(code) != 6:
+            return
+        
         self.recovery_codes.update_one(
             {"email": email, "code": code},
             {"$set": {"used": True}}
@@ -165,6 +186,9 @@ class AuthService:
             email: The student's email
             code: The recovery code to send
         """
+        # Validar email
+        email = SecurityValidator.validate_email(email)
+        
         if not all([settings.SMTP_HOST, settings.SMTP_PORT, settings.SMTP_USER, 
                    settings.SMTP_PASSWORD, settings.EMAILS_FROM_EMAIL]):
             raise ValueError("SMTP settings are not properly configured")
@@ -221,6 +245,9 @@ class AuthService:
             bool: True if the password was updated successfully
         """
         try:
+            # Validar email
+            email = SecurityValidator.validate_email(email)
+            
             # Hash the new password
             hashed_password = self.get_password_hash(new_password)
             
@@ -233,4 +260,4 @@ class AuthService:
             return result.modified_count > 0
         except Exception as e:
             print(f"Error updating password: {str(e)}")
-            return False 
+            return False

@@ -2,6 +2,7 @@ from typing import Optional, List
 from pymongo.results import InsertOneResult, UpdateResult
 from app.models.student import Student
 from app.DB.database import get_database
+from app.core.security import SecurityValidator
 import datetime
 
 class StudentService:
@@ -28,15 +29,35 @@ class StudentService:
         Raises:
             Exception: If the student already exists.
         """
+        # Validar y sanitizar email
+        email = SecurityValidator.validate_email(student_data.Correo_electronico)
+        
         # Check for existing student by email
-        existing_student = self.get_student_by_email(student_data.Correo_electronico)
+        existing_student = self.get_student_by_email(email)
         if existing_student:
             raise Exception("Student with this email already exists")
         
         student_dict = student_data.model_dump()
+        student_dict["Correo_electronico"] = email
+        
+        # Sanitizar campos de texto
+        if "Nombre" in student_dict and student_dict["Nombre"]:
+            student_dict["Nombre"] = SecurityValidator.sanitize_string(
+                student_dict["Nombre"], "nombre"
+            )
+        if "Institucion_educativa" in student_dict and student_dict["Institucion_educativa"]:
+            student_dict["Institucion_educativa"] = SecurityValidator.sanitize_string(
+                student_dict["Institucion_educativa"], "institucion_educativa"
+            )
+        if "Grado_academico" in student_dict and student_dict["Grado_academico"]:
+            student_dict["Grado_academico"] = SecurityValidator.sanitize_string(
+                student_dict["Grado_academico"], "grado_academico"
+            )
+        
         # Convert Fecha_de_nacimiento to ISO string for MongoDB
         if isinstance(student_dict["Fecha_de_nacimiento"], datetime.date):
             student_dict["Fecha_de_nacimiento"] = student_dict["Fecha_de_nacimiento"].isoformat()
+        
         result = self.collection.insert_one(student_dict)
         student_dict["_id"] = str(result.inserted_id)
         return student_dict
@@ -46,6 +67,9 @@ class StudentService:
         Retrieve a student from the database by their email address.
         Returns the student document as a dict, or None if not found.
         """
+        # Validar y sanitizar email
+        email = SecurityValidator.validate_email(email)
+        
         student_data = self.collection.find_one({"Correo_electronico": email})
         if student_data:
             student_data["_id"] = str(student_data["_id"])
@@ -60,15 +84,40 @@ class StudentService:
         Raises:
             Exception: If the student does not exist or no changes were made.
         """
+        # Validar y sanitizar email
+        email = SecurityValidator.validate_email(email)
+        
         # Check if the student exists
         existing_student = self.get_student_by_email(email)
         if not existing_student:
             raise Exception("Student not found")
         
         update_data = student_data.model_dump(exclude_unset=True)
+        
+        # Sanitizar email si está presente
+        if "Correo_electronico" in update_data:
+            update_data["Correo_electronico"] = SecurityValidator.validate_email(
+                update_data["Correo_electronico"]
+            )
+        
+        # Sanitizar campos de texto
+        if "Nombre" in update_data and update_data["Nombre"]:
+            update_data["Nombre"] = SecurityValidator.sanitize_string(
+                update_data["Nombre"], "nombre"
+            )
+        if "Institucion_educativa" in update_data and update_data["Institucion_educativa"]:
+            update_data["Institucion_educativa"] = SecurityValidator.sanitize_string(
+                update_data["Institucion_educativa"], "institucion_educativa"
+            )
+        if "Grado_academico" in update_data and update_data["Grado_academico"]:
+            update_data["Grado_academico"] = SecurityValidator.sanitize_string(
+                update_data["Grado_academico"], "grado_academico"
+            )
+        
         # Convert Fecha_de_nacimiento to ISO string if present
         if "Fecha_de_nacimiento" in update_data and isinstance(update_data["Fecha_de_nacimiento"], datetime.date):
             update_data["Fecha_de_nacimiento"] = update_data["Fecha_de_nacimiento"].isoformat()
+        
         result = self.collection.update_one(
             {"Correo_electronico": email},
             {"$set": update_data}
@@ -85,10 +134,14 @@ class StudentService:
         Raises:
             Exception: If the student does not exist.
         """
+        # Validar y sanitizar email
+        email = SecurityValidator.validate_email(email)
+        
         # Check if the student exists
         existing_student = self.get_student_by_email(email)
         if not existing_student:
             raise Exception("Student not found")
+        
         result = self.collection.delete_one({"Correo_electronico": email})
         return result.deleted_count > 0
 
